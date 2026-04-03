@@ -1,13 +1,181 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IN/OUT Data Entry System</title>
+<meta charset="UTF-8">
+<title>IN/OUT DATA ENTRY SYSTEM WITH BALANCE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+body { font-family: Arial; background-color: #f7f9fc; margin: 30px; }
+h2,h3 { text-align:center; color:#2c3e50; text-transform:uppercase;}
+form { max-width:700px; margin:auto; background:#fff; padding:20px; border-radius:10px; box-shadow:0 0 10px rgba(0,0,0,0.1);}
+form div { margin-bottom:12px; }
+label { display:inline-block; width:150px; font-weight:bold; text-transform:uppercase; }
+input { width: calc(100% - 160px); padding:6px; }
+button { padding:10px 20px; margin:10px 5px 0 0; cursor:pointer; border:none; border-radius:5px; background:#2980b9; color:#fff; font-weight:bold; text-transform:uppercase;}
+button:hover { background:#1f618d; }
+table { width:100%; border-collapse: collapse; margin-top:30px; max-width:1000px; margin-left:auto; margin-right:auto; background:#fff; border-radius:10px; overflow:hidden;}
+th, td { border:1px solid #ddd; padding:10px; text-align:center; text-transform:uppercase;}
+th { background:#2980b9; color:white; }
+tbody tr:nth-child(even) { background:#f2f2f2; }
+tbody tr.selected { background:#f39c12 !important; }
+</style>
 </head>
 <body>
-    <h1>IN/OUT Data Entry System</h1>
-    <p>Current Date and Time (UTC - YYYY-MM-DD HH:MM:SS formatted): 2026-04-03 09:50:41</p>
-    <p>Current User's Login: arpitsharma5881-ui</p>
+
+<h2>IN/OUT DATA ENTRY SYSTEM WITH BALANCE</h2>
+
+<h3>STEP 1: ADD IN ENTRY</h3>
+<form id="inForm">
+<div><label>PRODUCT NAME:</label><input type="text" id="productName" required></div>
+<div><label>MODEL NAME:</label><input type="text" id="modelName"></div>
+<div><label>IN QUANTITY:</label><input type="number" id="inQty" min="0" value="0" required></div>
+<div><label>REMARKS:</label><input type="text" id="remarks"></div>
+<div><button type="button" onclick="addInEntry()">ADD IN ENTRY</button></div>
+</form>
+
+<h3>STEP 2: ADD OUT ENTRY</h3>
+<form id="outForm">
+<div><label>PRODUCT NAME:</label><input type="text" id="outProduct" required></div>
+<div><label>OUT QUANTITY:</label><input type="number" id="outQty" min="0" value="0" required></div>
+<div><label>RECEIVING NAME:</label><input type="text" id="recvName"></div>
+<div><label>RECEIVING ID:</label><input type="text" id="recvID"></div>
+<div><button type="button" onclick="addOutEntry()">ADD OUT ENTRY</button></div>
+<div><button type="button" onclick="exportExcel()">EXPORT TO EXCEL</button></div>
+</form>
+
+<h3>IN ENTRIES</h3>
+<table id="inTable">
+<thead>
+<tr>
+<th>SERIAL</th><th>DATE & TIME (IN)</th><th>PRODUCT</th><th>MODEL</th><th>IN QTY</th><th>REMARKS</th><th>BALANCE</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<h3>OUT ENTRIES</h3>
+<table id="outTable">
+<thead>
+<tr>
+<th>SERIAL</th><th>DATE & TIME (OUT)</th><th>PRODUCT</th><th>MODEL</th><th>OUT QTY</th><th>RECEIVING NAME</th><th>RECEIVING ID</th><th>BALANCE</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<script>
+let inEntries = [];
+let outEntries = [];
+
+// LOAD SAVED DATA
+window.onload = function() {
+    const savedIn = localStorage.getItem("inEntries");
+    const savedOut = localStorage.getItem("outEntries");
+    if(savedIn) inEntries = JSON.parse(savedIn);
+    if(savedOut) outEntries = JSON.parse(savedOut);
+    renderTables();
+}
+
+// SAVE TO LOCALSTORAGE
+function saveData() {
+    localStorage.setItem("inEntries", JSON.stringify(inEntries));
+    localStorage.setItem("outEntries", JSON.stringify(outEntries));
+}
+
+// ADD IN ENTRY
+function addInEntry() {
+    const dateTime = new Date().toLocaleString();
+    const product = document.getElementById("productName").value.trim();
+    const model = document.getElementById("modelName").value.trim();
+    const qty = parseInt(document.getElementById("inQty").value) || 0;
+    const remarks = document.getElementById("remarks").value.trim();
+    if(!product || qty<=0){ alert("ENTER PRODUCT & IN QTY"); return; }
+    const entry={dateTime, product, model, inQty:qty, remarks};
+    inEntries.push(entry);
+    saveData();
+    renderTables();
+    document.getElementById("inForm").reset();
+}
+
+// ADD OUT ENTRY
+function addOutEntry() {
+    const dateTime = new Date().toLocaleString();
+    const product = document.getElementById("outProduct").value.trim();
+    const qty = parseInt(document.getElementById("outQty").value) || 0;
+    const recvName = document.getElementById("recvName").value.trim();
+    const recvID = document.getElementById("recvID").value.trim();
+    const totalIn = inEntries.filter(e=>e.product===product).reduce((a,b)=>a+b.inQty,0);
+    const totalOut = outEntries.filter(e=>e.product===product).reduce((a,b)=>a+b.outQty,0);
+    const balance = totalIn - totalOut;
+    if(!product || qty<=0 || qty>balance){ alert("ENTER VALID OUT QTY, CANNOT EXCEED BALANCE"); return; }
+    const entry={dateTime, product, outQty:qty, recvName, recvID};
+    outEntries.push(entry);
+    saveData();
+    renderTables();
+    document.getElementById("outForm").reset();
+}
+
+// CALCULATE BALANCE
+function getBalance(product){
+    const totalIn = inEntries.filter(e=>e.product===product).reduce((a,b)=>a+b.inQty,0);
+    const totalOut = outEntries.filter(e=>e.product===product).reduce((a,b)=>a+b.outQty,0);
+    return totalIn - totalOut;
+}
+
+// RENDER TABLES
+function renderTables(){
+    const inTbody=document.getElementById("inTable").querySelector("tbody");
+    const outTbody=document.getElementById("outTable").querySelector("tbody");
+    inTbody.innerHTML=""; outTbody.innerHTML="";
+    inEntries.forEach((e,i)=>{
+        const row=inTbody.insertRow();
+        row.insertCell().textContent=i+1;
+        row.insertCell().textContent=e.dateTime;
+        row.insertCell().textContent=e.product;
+        row.insertCell().textContent=e.model;
+        row.insertCell().textContent=e.inQty;
+        row.insertCell().textContent=e.remarks;
+        row.insertCell().textContent=getBalance(e.product);
+    });
+    outEntries.forEach((e,i)=>{
+        const row=outTbody.insertRow();
+        row.insertCell().textContent=i+1;
+        row.insertCell().textContent=e.dateTime;
+        row.insertCell().textContent=e.product;
+        row.insertCell().textContent=inEntries.find(x=>x.product===e.product)?.model || "";
+        row.insertCell().textContent=e.outQty;
+        row.insertCell().textContent=e.recvName;
+        row.insertCell().textContent=e.recvID;
+        row.insertCell().textContent=getBalance(e.product);
+    });
+}
+
+// EXPORT EXCEL
+function exportExcel(){
+    let data=[];
+    inEntries.forEach(e=>{
+        const out = outEntries.filter(o=>o.product===e.product);
+        if(out.length===0){
+            data.push({DATE_IN:e.dateTime, PRODUCT:e.product, MODEL:e.model, IN_QTY:e.inQty,
+            DATE_OUT:"", OUT_QTY:"", RECEIVING_NAME:"", RECEIVING_ID:"", BALANCE:getBalance(e.product)});
+        } else{
+            out.forEach(o=>{
+                data.push({DATE_IN:e.dateTime, PRODUCT:e.product, MODEL:e.model, IN_QTY:e.inQty,
+                    DATE_OUT:o.dateTime, OUT_QTY:o.outQty, RECEIVING_NAME:o.recvName, RECEIVING_ID:o.recvID,
+                    BALANCE:getBalance(e.product)});
+            });
+        }
+    });
+    const ws=XLSX.utils.json_to_sheet(data);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,"IN_OUT_DATA");
+    XLSX.writeFile(wb,"IN_OUT_DATA.xlsx");
+}
+
+// AUTO EXPORT ON WINDOW CLOSE
+window.addEventListener("beforeunload", function (e) {
+    exportExcel();
+});
+</script>
 </body>
 </html>
